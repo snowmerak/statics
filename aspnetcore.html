@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASP.NET Core 대시보드 | 아키텍처, REST API, WebSocket</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #F8F9FA;
+            color: #343A40;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 300px;
+            }
+        }
+        .nav-link {
+            transition: color 0.3s, border-bottom-color 0.3s;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-link.active, .nav-link:hover {
+            color: #007BFF;
+            border-bottom-color: #007BFF;
+        }
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.1);
+        }
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 40;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            z-index: 50;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        .modal.open {
+            display: block;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .modal-backdrop.open {
+            display: block;
+            opacity: 1;
+        }
+        .tab.active {
+            border-color: #007BFF;
+            color: #007BFF;
+            background-color: #E7F1FF;
+        }
+        .pipeline-item {
+            transition: background-color 0.3s, transform 0.3s;
+        }
+        .pipeline-item:hover {
+            transform: scale(1.05);
+            background-color: #E9ECEF;
+        }
+        .flow-step {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .flow-step:hover, .flow-step.active {
+            background-color: #007BFF;
+            color: white;
+            transform: scale(1.05);
+        }
+        .flow-step.active {
+            box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+        }
+        .flow-line {
+            background-color: #CED4DA;
+            height: 2px;
+            flex-grow: 1;
+        }
+        .flow-line.active {
+            background-color: #007BFF;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #F8F9FA;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #ADB5BD;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6C757D;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-30 shadow-sm">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-2xl font-bold text-blue-600">🚀 ASP.NET Core</span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#architecture" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-700">핵심 아키텍처</a>
+                        <a href="#rest-api" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-700">REST API</a>
+                        <a href="#websocket" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-700">WebSocket</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+
+        <section id="intro" class="text-center mb-16">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4">ASP.NET Core 완벽 정복 가이드</h1>
+            <p class="max-w-3xl mx-auto text-lg text-gray-600">
+                이 대시보드는 ASP.NET Core의 핵심 아키텍처부터 REST API 구축, 실시간 WebSocket 통신까지, 현대적인 웹 애플리케이션 개발에 필요한 모든 것을 시각적이고 인터랙티브한 방식으로 학습할 수 있도록 설계되었습니다. 각 섹션을 자유롭게 탐색하며 .NET 개발 역량을 한 단계 업그레이드해 보세요.
+            </p>
+        </section>
+
+        <section id="architecture" class="mb-20">
+            <h2 class="text-3xl font-bold text-center mb-2">핵심 아키텍처</h2>
+            <p class="text-center text-gray-500 mb-10">ASP.NET Core를 구성하는 기본 요소들입니다. 카드를 클릭하여 자세히 알아보세요.</p>
+            <div id="architecture-cards" class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            </div>
+        </section>
+
+        <section id="rest-api" class="mb-20">
+            <h2 class="text-3xl font-bold text-center mb-2">REST API 심층 분석</h2>
+             <p class="text-center text-gray-500 mb-10">클라이언트와 서버가 소통하는 표준 방식, REST API의 모든 것을 파헤쳐 봅니다.</p>
+            
+            <div class="bg-white p-8 rounded-xl shadow-lg mb-12">
+                <h3 class="text-2xl font-bold mb-4 text-center">HTTP 요청 처리 흐름</h3>
+                <p class="text-center text-gray-500 mb-8">ASP.NET Core가 어떻게 HTTP 요청을 받아 처리하고 응답하는지 단계별로 살펴보세요. 각 단계를 클릭하면 상세 설명을 볼 수 있습니다.</p>
+                <div id="rest-flow" class="flex items-center justify-center flex-wrap gap-2"></div>
+                <div id="flow-content-display" class="mt-8 p-6 bg-blue-50 rounded-lg min-h-[150px] transition-all duration-300">
+                    <h4 id="flow-title" class="text-xl font-bold text-blue-800"></h4>
+                    <p id="flow-description" class="text-gray-700 mt-2"></p>
+                </div>
+            </div>
+
+            <div id="rest-api-tabs" class="flex justify-center border-b mb-8"></div>
+            <div id="rest-api-content"></div>
+        </section>
+
+        <section id="websocket">
+            <h2 class="text-3xl font-bold text-center mb-2">WebSocket 통신</h2>
+            <p class="text-center text-gray-500 mb-10">실시간 양방향 통신을 위한 WebSocket의 개념과 ASP.NET Core에서의 활용법을 알아봅니다.</p>
+            <div class="bg-white p-8 rounded-xl shadow-lg">
+                <div class="grid md:grid-cols-2 gap-8 items-center">
+                    <div>
+                        <h3 class="text-2xl font-bold mb-4">REST API vs WebSocket</h3>
+                        <p class="mb-4 text-gray-600">
+                            REST API가 클라이언트의 요청이 있을 때만 서버가 응답하는 단방향 통신에 적합하다면, WebSocket은 서버와 클라이언트 간의 연결을 한 번 수립한 후, 양방향으로 데이터를 실시간으로 주고받을 수 있는 통신 프로토콜입니다. 이 차이점은 채팅, 실시간 알림, 온라인 게임 등 즉각적인 데이터 교환이 필수적인 애플리케이션을 만들 때 WebSocket을 강력한 선택지로 만듭니다.
+                        </p>
+                        <div class="space-y-3">
+                            <div class="p-3 bg-gray-100 rounded-lg"><strong>주요 특징:</strong> 단일 TCP 연결을 통한 지속적인 양방향 통신</div>
+                            <div class="p-3 bg-gray-100 rounded-lg"><strong>핸드셰이크:</strong> HTTP/HTTPS 프로토콜을 통해 초기 연결을 시작하고, 성공 시 WebSocket 프로토콜로 전환</div>
+                            <div class="p-3 bg-gray-100 rounded-lg"><strong>ASP.NET Core 구현:</strong> 미들웨어를 사용하거나, 더 고수준의 추상화 라이브러리인 SignalR을 통해 쉽게 구현 가능</div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center justify-center p-4">
+                        <div class="font-bold text-lg mb-4">통신 방식 비교</div>
+                        <div class="flex items-center justify-between w-full mb-8">
+                            <div class="text-center">
+                                <div class="text-5xl">💻</div>
+                                <div>클라이언트</div>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <div class="text-blue-500 font-semibold">요청 ➡</div>
+                                <div class="text-gray-400 font-semibold">⬅ 응답</div>
+                            </div>
+                             <div class="text-center">
+                                <div class="text-5xl">🌐</div>
+                                <div>서버 (REST)</div>
+                            </div>
+                        </div>
+                         <div class="flex items-center justify-between w-full">
+                            <div class="text-center">
+                                <div class="text-5xl">💻</div>
+                                <div>클라이언트</div>
+                            </div>
+                            <div class="flex flex-col items-center">
+                               <div class="text-green-500 font-semibold">➡ 데이터 ➡</div>
+                               <div class="text-green-500 font-semibold">⬅ 데이터 ⬅</div>
+                            </div>
+                             <div class="text-center">
+                                <div class="text-5xl">🌐</div>
+                                <div>서버 (WebSocket)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="modal-backdrop" class="modal-backdrop"></div>
+    <div id="modal" class="modal w-11/12 md:max-w-2xl lg:max-w-4xl bg-white rounded-xl shadow-2xl">
+        <div class="p-6 md:p-8">
+            <div class="flex justify-between items-start">
+                <h3 id="modal-title" class="text-2xl font-bold text-gray-800"></h3>
+                <button id="modal-close" class="text-gray-400 hover:text-gray-600 transition text-3xl leading-none">&times;</button>
+            </div>
+            <div id="modal-body" class="mt-4 max-h-[70vh] overflow-y-auto pr-4 text-gray-600">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const sections = document.querySelectorAll('main section[id]');
+            const navLinks = document.querySelectorAll('header nav a');
+            
+            const data = {
+                architecture: [
+                    { 
+                        id: 'middleware',
+                        title: '미들웨어 파이프라인', 
+                        icon: '🔗',
+                        summary: 'HTTP 요청과 응답을 처리하는 소프트웨어 구성 요소들의 연속적인 체인입니다. 인증, 라우팅, 오류 처리 등 다양한 기능을 담당합니다.',
+                        content: `
+                            <h4 class="font-bold text-lg mb-2">미들웨어 파이프라인이란?</h4>
+                            <p class="mb-4">미들웨어는 HTTP 요청이 애플리케이션의 핵심 로직에 도달하기 전, 그리고 응답이 클라이언트에게 전송되기 전에 순차적으로 실행되는 구성 요소들의 파이프라인입니다. 각 미들웨어는 요청을 검사, 수정하거나, 다음 미들웨어로 전달하거나, 혹은 직접 응답을 생성하여 파이프라인을 단축시킬 수 있습니다.</p>
+                            <h4 class="font-bold text-lg mb-2">실행 순서의 중요성</h4>
+                            <p class="mb-4">미들웨어는 <code>Program.cs</code>에 등록된 순서대로 실행됩니다. 이 순서는 애플리케이션 동작에 매우 중요합니다. 예를 들어, 오류 처리 미들웨어는 다른 미들웨어에서 발생할 예외를 잡기 위해 가장 앞에, 인증 미들웨어는 권한 부여 미들웨어보다 앞에 위치해야 합니다.</p>
+                            <div class="bg-gray-100 p-4 rounded-lg">
+                                <div class="text-sm font-semibold mb-2 text-center">요청 처리 순서 (Request) ➡</div>
+                                <div class="flex flex-wrap gap-2 justify-center">
+                                    <div class="pipeline-item p-2 bg-white rounded shadow-sm text-center">1. 예외 처리<br><code>UseExceptionHandler</code></div>
+                                    <div class="pipeline-item p-2 bg-white rounded shadow-sm text-center">2. 정적 파일<br><code>UseStaticFiles</code></div>
+                                    <div class="pipeline-item p-2 bg-white rounded shadow-sm text-center">3. 라우팅<br><code>UseRouting</code></div>
+                                    <div class="pipeline-item p-2 bg-white rounded shadow-sm text-center">4. 인증<br><code>UseAuthentication</code></div>
+                                    <div class="pipeline-item p-2 bg-white rounded shadow-sm text-center">5. 권한 부여<br><code>UseAuthorization</code></div>
+                                    <div class="pipeline-item p-2 bg-white rounded shadow-sm text-center">6. 엔드포인트<br><code>MapControllers</code></div>
+                                </div>
+                                <div class="text-sm font-semibold mt-4 text-center">⬅ 응답 처리 순서 (Response)</div>
+                            </div>
+                        `
+                    },
+                    { 
+                        id: 'di',
+                        title: '종속성 주입 (DI)', 
+                        icon: '💉',
+                        summary: '객체가 사용하는 다른 객체(의존성)를 외부에서 제공받는 디자인 패턴입니다. 코드의 결합도를 낮추고 유연성과 테스트 용이성을 높입니다.',
+                        content: `
+                            <h4 class="font-bold text-lg mb-2">종속성 주입이란?</h4>
+                            <p class="mb-4">클래스가 필요로 하는 다른 클래스의 인스턴스(서비스)를 직접 생성하는 대신, 외부의 DI 컨테이너로부터 '주입'받는 방식입니다. ASP.NET Core는 프레임워크 수준에서 DI를 기본으로 지원하여, 개발자가 느슨하게 결합된 코드를 쉽게 작성할 수 있도록 돕습니다.</p>
+                            <h4 class="font-bold text-lg mb-2">서비스 수명 주기</h4>
+                            <p class="mb-4">DI 컨테이너에 서비스를 등록할 때, 인스턴스가 얼마나 오래 유지될지를 결정하는 수명 주기를 선택해야 합니다. 이는 애플리케이션의 성능과 동작에 큰 영향을 미칩니다.</p>
+                            <div class="grid md:grid-cols-3 gap-4 text-center">
+                                <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+                                    <h5 class="font-bold text-xl text-red-700">Transient</h5>
+                                    <p class="text-sm text-red-600 mt-2">요청될 때마다 항상 <strong>새로운 인스턴스</strong>가 생성됩니다.</p>
+                                    <p class="text-xs text-gray-500 mt-2">가볍고 상태 없는 서비스에 적합</p>
+                                </div>
+                                <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <h5 class="font-bold text-xl text-blue-700">Scoped</h5>
+                                    <p class="text-sm text-blue-600 mt-2">각 HTTP 요청 내에서 <strong>하나의 인스턴스</strong>가 공유됩니다.</p>
+                                    <p class="text-xs text-gray-500 mt-2">DbContext와 같이 요청 단위로 상태 유지 시 사용</p>
+                                </div>
+                                <div class="p-4 bg-green-50 border border-green-200 rounded-lg">
+                                    <h5 class="font-bold text-xl text-green-700">Singleton</h5>
+                                    <p class="text-sm text-green-600 mt-2">애플리케이션 전체에서 <strong>단 하나의 인스턴스</strong>만 생성 및 공유됩니다.</p>
+                                    <p class="text-xs text-gray-500 mt-2">로깅 서비스, 캐시 등 전역 상태 관리에 사용</p>
+                                </div>
+                            </div>
+                        `
+                    },
+                    { 
+                        id: 'routing',
+                        title: '라우팅', 
+                        icon: '🗺️',
+                        summary: '들어오는 HTTP 요청의 URL을 분석하여, 해당 요청을 처리할 적절한 코드(엔드포인트)로 전달하는 메커니즘입니다.',
+                        content: `
+                            <h4 class="font-bold text-lg mb-2">라우팅의 역할</h4>
+                            <p class="mb-4">라우팅은 웹 애플리케이션이 <code>/products/123</code>이나 <code>/users/search?name=test</code>와 같은 다양한 URL에 대해 각기 다른 기능을 수행하도록 만드는 핵심 기술입니다. 요청 URL을 미리 정의된 라우트 템플릿과 비교하여 일치하는 엔드포인트(예: 컨트롤러 액션 메서드)를 찾아 실행합니다.</p>
+                            <h4 class="font-bold text-lg mb-2">특성 라우팅 (Attribute Routing)</h4>
+                            <p class="mb-4">Web API에서 가장 널리 사용되는 방식으로, 컨트롤러나 액션 메서드에 <code>[Route("api/[controller]")]</code>, <code>[HttpGet("{id}")]</code> 같은 특성을 직접 붙여 URL 패턴을 명시적으로 정의합니다. 이는 코드와 라우트 정의를 함께 관리할 수 있어 가독성과 유지보수성이 뛰어납니다.</p>
+                            <pre class="bg-gray-800 text-white p-4 rounded-lg text-sm overflow-x-auto"><code>[ApiController]
+[Route("api/[controller]")]
+public class ProductsController : ControllerBase
+{
+    // GET api/products
+    [HttpGet]
+    public IActionResult Get() { /* ... */ }
+
+    // GET api/products/5
+    [HttpGet("{id:int}")] // {id}는 int 타입만 허용하는 라우트 제약 조건
+    public IActionResult GetById(int id) { /* ... */ }
+}</code></pre>
+                        `
+                    },
+                    { 
+                        id: 'configuration',
+                        title: '구성 시스템', 
+                        icon: '⚙️',
+                        summary: 'appsettings.json, 환경 변수 등 다양한 소스로부터 설정 값을 읽어와 애플리케이션에 제공하는 유연한 시스템입니다.',
+                        content: `
+                            <h4 class="font-bold text-lg mb-2">계층적 구성</h4>
+                            <p class="mb-4">ASP.NET Core의 구성 시스템은 여러 소스로부터 설정 값을 계층적으로 읽어들입니다. 나중에 로드된 소스의 값이 이전에 로드된 값을 덮어씁니다. 이를 통해 기본 설정은 파일에 두고, 배포 환경에 따라 특정 값만 변경할 수 있습니다.</p>
+                            <h4 class="font-bold text-lg mb-2">일반적인 덮어쓰기 순서</h4>
+                            <ol class="list-decimal list-inside space-y-2 mb-4">
+                                <li><code>appsettings.json</code> (기본 설정)</li>
+                                <li><code>appsettings.{Environment}.json</code> (예: <code>appsettings.Production.json</code>)</li>
+                                <li>사용자 비밀 (개발 환경)</li>
+                                <li>환경 변수</li>
+                                <li>명령줄 인수</li>
+                            </ol>
+                            <h4 class="font-bold text-lg mb-2">Options 패턴</h4>
+                            <p>관련 설정 값들을 강력한 형식의 C# 클래스(POCO)로 묶어 관리하는 권장 방식입니다. DI를 통해 <code>IOptions&lt;T&gt;</code>를 주입받아 타입 안정적으로 설정 값에 접근할 수 있어 유지보수성이 크게 향상됩니다.</p>
+                        `
+                    },
+                    { 
+                        id: 'logging',
+                        title: '로깅', 
+                        icon: '📝',
+                        summary: '애플리케이션 실행 중 발생하는 이벤트를 기록하여 문제를 진단하고 시스템 동작을 모니터링하는 필수 기능입니다.',
+                        content: `
+                            <h4 class="font-bold text-lg mb-2">로깅의 중요성</h4>
+                            <p class="mb-4">효과적인 로깅은 단순한 기록을 넘어, 애플리케이션의 상태를 실시간으로 파악하고, 문제가 발생했을 때 신속하게 원인을 찾아 해결하며, 장기적으로는 시스템의 안정성과 성능을 개선하는 데 핵심적인 역할을 합니다.</p>
+                            <h4 class="font-bold text-lg mb-2">로그 수준 (Log Levels)</h4>
+                            <p class="mb-4">로그 메시지의 심각도를 나타내며, 설정된 수준 이상의 로그만 기록하도록 필터링할 수 있습니다. 프로덕션 환경에서는 보통 'Information' 이상을 기록합니다.</p>
+                            <div class="flex flex-wrap gap-2 text-sm">
+                                <span class="bg-gray-200 px-2 py-1 rounded">Trace</span>
+                                <span class="bg-blue-200 px-2 py-1 rounded">Debug</span>
+                                <span class="bg-green-200 px-2 py-1 rounded">Information</span>
+                                <span class="bg-yellow-200 px-2 py-1 rounded">Warning</span>
+                                <span class="bg-red-200 px-2 py-1 rounded">Error</span>
+                                <span class="bg-purple-300 px-2 py-1 rounded">Critical</span>
+                            </div>
+                            <h4 class="font-bold text-lg mt-4 mb-2">구조적 로깅 (Structured Logging)</h4>
+                            <p>단순 텍스트가 아닌 JSON과 같은 구조화된 형식으로 로그를 남기는 방식입니다. 이를 통해 로그 관리 시스템에서 특정 필드 값으로 로그를 쉽게 검색, 필터링, 분석할 수 있어 매우 강력합니다.</p>
+                        `
+                    },
+                    { 
+                        id: 'error-handling',
+                        title: '오류 처리', 
+                        icon: '🛡️',
+                        summary: '개발 환경에서는 상세한 예외 정보를, 프로덕션 환경에서는 사용자 친화적인 오류 페이지를 제공하는 방법을 다룹니다.',
+                        content: `
+                            <h4 class="font-bold text-lg mb-2">환경별 오류 처리</h4>
+                            <p class="mb-4">ASP.NET Core는 실행 환경(개발/프로덕션)에 따라 다른 오류 처리 방식을 쉽게 구성할 수 있습니다.</p>
+                            <ul class="list-disc list-inside space-y-2 mb-4">
+                                <li><strong>개발 환경:</strong> <code>UseDeveloperExceptionPage()</code> 미들웨어를 사용하여 스택 추적, 요청 정보 등 상세한 예외 정보를 개발자에게 보여줍니다.</li>
+                                <li><strong>프로덕션 환경:</strong> <code>UseExceptionHandler()</code> 미들웨어를 사용하여 처리되지 않은 모든 예외를 잡아 사용자에게는 친화적인 일반 오류 페이지를 보여주고, 서버에는 상세한 오류를 로깅합니다.</li>
+                            </ul>
+                            <h4 class="font-bold text-lg mb-2">ProblemDetails (RFC 7807)</h4>
+                            <p>웹 API에서 발생하는 오류를 일관되고 기계가 읽을 수 있는 형식으로 클라이언트에 전달하기 위한 표준입니다. <code>[ApiController]</code> 특성이 적용된 컨트롤러에서는 모델 유효성 검사 실패 시 자동으로 <code>ProblemDetails</code> 형식의 HTTP 400 응답을 생성해주어, 클라이언트의 오류 처리를 용이하게 합니다.</p>
+                        `
+                    }
+                ],
+                restApi: {
+                    flow: [
+                        { id: 'routing', name: '라우팅', description: '클라이언트의 요청 URL(예: /api/products/1)을 분석하여 어떤 컨트롤러의 어떤 액션 메서드가 실행되어야 하는지 결정합니다.' },
+                        { id: 'model-binding', name: '모델 바인딩', description: 'URL 경로, 쿼리 스트링, 요청 본문의 데이터를 액션 메서드의 C# 매개변수 (예: int id, Product aProduct)로 자동 변환하고 채워줍니다.' },
+                        { id: 'validation', name: '데이터 유효성 검사', description: '모델에 정의된 유효성 검사 규칙([Required], [MaxLength] 등)에 따라 데이터가 올바른지 확인합니다. [ApiController] 사용 시 유효하지 않으면 자동으로 HTTP 400 오류를 반환합니다.' },
+                        { id: 'controller-action', name: '컨트롤러 액션 실행', description: '실제 비즈니스 로직이 담긴 액션 메서드가 실행됩니다. 보통 서비스 계층을 호출하여 데이터를 처리합니다.' },
+                        { id: 'response-generation', name: '응답 생성', description: '액션 메서드의 실행 결과(데이터, 상태)를 바탕으로 적절한 HTTP 상태 코드(200 OK, 201 Created, 404 Not Found 등)와 함께 응답 본문을 생성하여 클라이언트에게 반환합니다.' },
+                    ],
+                    tabs: [
+                        {
+                            id: 'controllers',
+                            title: 'API 컨트롤러',
+                            content: `
+                                <h4 class="font-bold text-lg mb-2">역할과 책임</h4>
+                                <p class="mb-4">API 컨트롤러는 REST API의 진입점입니다. <code>ControllerBase</code>를 상속받아 HTTP 요청을 처리하는 데 필요한 기본 기능을 활용합니다. 컨트롤러의 주된 책임은 요청을 받고, 모델 바인딩 및 유효성 검사를 거쳐, 비즈니스 로직을 담고 있는 서비스 계층을 호출한 뒤, 그 결과를 HTTP 응답으로 변환하여 반환하는 것입니다.</p>
+                                <h4 class="font-bold text-lg mb-2">[ApiController] 특성</h4>
+                                <p class="mb-4">이 특성을 컨트롤러 클래스에 적용하면 API 개발을 편리하게 해주는 여러 기능이 자동으로 활성화됩니다.
+                                <ul class="list-disc list-inside space-y-1">
+                                    <li>모델 유효성 검사 실패 시 자동 HTTP 400 응답</li>
+                                    <li>특성 라우팅 강제</li>
+                                    <li>바인딩 소스 자동 추론</li>
+                                    <li>표준화된 오류 응답(ProblemDetails) 형식 제공</li>
+                                </ul>
+                                </p>
+                            `
+                        },
+                        {
+                            id: 'routing',
+                            title: '라우팅과 명명 규칙',
+                            content: `
+                                <h4 class="font-bold text-lg mb-2">RESTful URI 설계 원칙</h4>
+                                <p class="mb-4">잘 설계된 REST API는 일관되고 예측 가능한 URL 구조를 가집니다. 이는 API의 사용성을 높이는 데 매우 중요합니다.</p>
+                                <ul class="list-disc list-inside space-y-2">
+                                    <li><strong>자원 중심, 명사 사용:</strong> URL은 행위(동사)가 아닌 자원(명사)을 나타내야 합니다. (O: <code>/products</code>, X: <code>/getProducts</code>)</li>
+                                    <li><strong>복수형 명사 사용:</strong> 자원 컬렉션을 나타낼 때는 복수형을 사용합니다. (예: <code>/users</code>, <code>/orders</code>)</li>
+                                    <li><strong>계층 구조 표현:</strong> 관련된 자원은 경로로 표현합니다. (예: <code>/users/{userId}/orders</code>)</li>
+                                    <li><strong>HTTP 메서드로 행위 표현:</strong> 자원에 대한 실제 작업은 HTTP 메서드(GET, POST, PUT, DELETE)로 표현합니다.</li>
+                                </ul>
+                                 <div class="mt-6">
+                                    <h4 class="font-bold text-lg mb-2 text-center">HTTP 메서드별 역할</h4>
+                                    <div class="chart-container"><canvas id="httpMethodsChart"></canvas></div>
+                                </div>
+                            `
+                        },
+                        {
+                            id: 'model-binding',
+                            title: '모델 바인딩과 DTO',
+                            content: `
+                                <h4 class="font-bold text-lg mb-2">데이터 흐름의 자동화</h4>
+                                <p class="mb-4">모델 바인딩은 HTTP 요청의 다양한 소스(URL, 쿼리 스트링, 본문)에서 데이터를 추출하여 액션 메서드의 매개변수로 자동 변환해주는 마법 같은 기능입니다. <code>[FromQuery]</code>, <code>[FromRoute]</code>, <code>[FromBody]</code>, <code>[FromHeader]</code> 등의 특성을 사용하여 데이터 소스를 명시적으로 지정할 수 있습니다.</p>
+                                <h4 class="font-bold text-lg mb-2">DTO (Data Transfer Object) 사용의 중요성</h4>
+                                <p class="mb-4">클라이언트와의 데이터 교환을 위해 특별히 설계된 DTO 클래스를 사용하는 것이 좋습니다. DTO를 사용하면 다음과 같은 이점이 있습니다.</p>
+                                <ul class="list-disc list-inside space-y-2">
+                                    <li><strong>보안 강화:</strong> 데이터베이스 모델의 모든 속성이 노출되는 것을 방지하고, 의도치 않은 데이터 변경(오버포스팅 공격)을 막을 수 있습니다.</li>
+                                    <li><strong>API 계약 안정성:</strong> 내부 도메인 모델이 변경되더라도 API의 요청/응답 구조는 DTO를 통해 안정적으로 유지할 수 있습니다.</li>
+                                    <li><strong>최적화:</strong> API의 특정 요구사항에 맞춰 필요한 데이터만 포함하여 페이로드 크기를 줄일 수 있습니다.</li>
+                                </ul>
+                            `
+                        },
+                        {
+                            id: 'validation',
+                            title: '데이터 유효성 검사',
+                            content: `
+                                <h4 class="font-bold text-lg mb-2">데이터 무결성 확보</h4>
+                                <p class="mb-4">클라이언트로부터 받은 데이터가 올바른지 확인하는 것은 데이터 무결성과 보안을 위해 필수적입니다. ASP.NET Core는 데이터 주석(Data Annotations)을 사용한 선언적 유효성 검사를 지원합니다.</p>
+                                <h4 class="font-bold text-lg mb-2">주요 데이터 주석 특성</h4>
+                                <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                                    <span class="p-2 bg-gray-100 rounded"><code>[Required]</code>: 필수 값</span>
+                                    <span class="p-2 bg-gray-100 rounded"><code>[StringLength]</code>: 문자열 길이 제한</span>
+                                    <span class="p-2 bg-gray-100 rounded"><code>[Range]</code>: 숫자 범위 제한</span>
+                                    <span class="p-2 bg-gray-100 rounded"><code>[EmailAddress]</code>: 이메일 형식</span>
+                                    <span class="p-2 bg-gray-100 rounded"><code>[RegularExpression]</code>: 정규식 패턴</span>
+                                    <span class="p-2 bg-gray-100 rounded"><code>[Compare]</code>: 속성 값 비교</span>
+                                </div>
+                                <p class="mt-4"><code>[ApiController]</code> 특성과 함께 사용하면, 모델 바인딩 시 유효성 검사가 자동으로 수행되고, 실패 시 <code>ModelState.IsValid</code>를 수동으로 확인할 필요 없이 자동으로 HTTP 400 오류가 반환되어 코드가 매우 간결해집니다.</p>
+                            `
+                        },
+                    ]
+                }
+            };
+            
+            const architectureCardsContainer = document.getElementById('architecture-cards');
+            data.architecture.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.dataset.modalId = item.id;
+                card.innerHTML = `
+                    <div class="flex items-center mb-4">
+                        <span class="text-3xl mr-4">${item.icon}</span>
+                        <h3 class="text-xl font-bold">${item.title}</h3>
+                    </div>
+                    <p class="text-gray-600">${item.summary}</p>
+                `;
+                architectureCardsContainer.appendChild(card);
+            });
+
+            const modal = document.getElementById('modal');
+            const modalBackdrop = document.getElementById('modal-backdrop');
+            const modalTitle = document.getElementById('modal-title');
+            const modalBody = document.getElementById('modal-body');
+            const modalClose = document.getElementById('modal-close');
+
+            architectureCardsContainer.addEventListener('click', (e) => {
+                const card = e.target.closest('.card');
+                if (card) {
+                    const modalId = card.dataset.modalId;
+                    const item = data.architecture.find(d => d.id === modalId);
+                    if (item) {
+                        modalTitle.textContent = item.title;
+                        modalBody.innerHTML = item.content;
+                        modal.classList.add('open');
+                        modalBackdrop.classList.add('open');
+                    }
+                }
+            });
+
+            const closeModal = () => {
+                modal.classList.remove('open');
+                modalBackdrop.classList.remove('open');
+            };
+
+            modalClose.addEventListener('click', closeModal);
+            modalBackdrop.addEventListener('click', closeModal);
+
+            const restFlowContainer = document.getElementById('rest-flow');
+            data.restApi.flow.forEach((step, index) => {
+                const stepEl = document.createElement('div');
+                stepEl.className = 'flow-step border-2 border-gray-300 rounded-full px-4 py-2 font-semibold text-gray-700 bg-white';
+                stepEl.textContent = step.name;
+                stepEl.dataset.id = step.id;
+                restFlowContainer.appendChild(stepEl);
+
+                if (index < data.restApi.flow.length - 1) {
+                    const lineEl = document.createElement('div');
+                    lineEl.className = 'flow-line w-8 hidden md:block';
+                    lineEl.dataset.lineFor = step.id;
+                    restFlowContainer.appendChild(lineEl);
+                }
+            });
+
+            const flowContentDisplay = document.getElementById('flow-content-display');
+            const flowTitleEl = document.getElementById('flow-title');
+            const flowDescriptionEl = document.getElementById('flow-description');
+
+            const updateFlowContent = (stepId) => {
+                const stepData = data.restApi.flow.find(s => s.id === stepId);
+                if (stepData) {
+                    flowTitleEl.textContent = stepData.name;
+                    flowDescriptionEl.textContent = stepData.description;
+                }
+                 document.querySelectorAll('.flow-step').forEach(el => {
+                    el.classList.toggle('active', el.dataset.id === stepId);
+                 });
+                 
+                const activeIndex = data.restApi.flow.findIndex(s => s.id === stepId);
+                document.querySelectorAll('.flow-line').forEach((line, index) => {
+                    line.classList.toggle('active', index < activeIndex);
+                });
+            };
+            
+            restFlowContainer.addEventListener('click', e => {
+                if (e.target.classList.contains('flow-step')) {
+                    updateFlowContent(e.target.dataset.id);
+                }
+            });
+            updateFlowContent(data.restApi.flow[0].id);
+
+            const restApiTabsContainer = document.getElementById('rest-api-tabs');
+            const restApiContentContainer = document.getElementById('rest-api-content');
+
+            data.restApi.tabs.forEach((tab, index) => {
+                const tabEl = document.createElement('button');
+                tabEl.className = `tab border-b-2 px-4 py-2 -mb-px text-sm font-medium text-gray-500 hover:text-blue-600 ${index === 0 ? 'active' : ''}`;
+                tabEl.textContent = tab.title;
+                tabEl.dataset.tabId = tab.id;
+                restApiTabsContainer.appendChild(tabEl);
+            });
+
+            const updateRestApiContent = (tabId) => {
+                const tabData = data.restApi.tabs.find(t => t.id === tabId);
+                if (tabData) {
+                    restApiContentContainer.innerHTML = `<div class="bg-white p-8 rounded-xl shadow-lg">${tabData.content}</div>`;
+                    
+                    document.querySelectorAll('#rest-api-tabs .tab').forEach(t => {
+                        t.classList.toggle('active', t.dataset.tabId === tabId);
+                    });
+                    
+                    if (tabId === 'routing') {
+                        renderHttpMethodsChart();
+                    }
+                }
+            };
+            
+            restApiTabsContainer.addEventListener('click', e => {
+                if (e.target.classList.contains('tab')) {
+                    updateRestApiContent(e.target.dataset.tabId);
+                }
+            });
+            updateRestApiContent(data.restApi.tabs[0].id);
+
+            function renderHttpMethodsChart() {
+                const ctx = document.getElementById('httpMethodsChart')?.getContext('2d');
+                if (!ctx) return;
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+                        datasets: [{
+                            label: '역할',
+                            data: [1, 1, 1, 1, 1],
+                            backgroundColor: [
+                                'rgba(54, 162, 235, 0.6)',
+                                'rgba(75, 192, 192, 0.6)',
+                                'rgba(255, 159, 64, 0.6)',
+                                'rgba(255, 99, 132, 0.6)',
+                                'rgba(153, 102, 255, 0.6)'
+                            ],
+                            borderColor: [
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(255, 159, 64, 1)',
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(153, 102, 255, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const labels = {
+                                            'GET': '자원 조회 (Read)',
+                                            'POST': '자원 생성 (Create)',
+                                            'PUT': '자원 전체 교체 (Update)',
+                                            'DELETE': '자원 삭제 (Delete)',
+                                            'PATCH': '자원 일부 수정 (Partial Update)'
+                                        };
+                                        return labels[context.label] || '';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                display: false,
+                                beginAtZero: true,
+                                max: 1.2
+                            }
+                        }
+                    }
+                });
+            }
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const id = entry.target.getAttribute('id');
+                        navLinks.forEach(link => {
+                            link.classList.toggle('active', link.getAttribute('href').substring(1) === id);
+                        });
+                    }
+                });
+            }, { rootMargin: '-50% 0px -50% 0px' });
+
+            sections.forEach(section => {
+                observer.observe(section);
+            });
+            
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    document.querySelector(this.getAttribute('href')).scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                });
+            });
+        });
+    </script>
+
+</body>
+</html>
