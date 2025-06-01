@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC 심층 분석: 인터랙티브 가이드 (Pion 예제 추가)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+            color: #334155; /* slate-700 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .nav-link {
+            transition: color 0.3s, border-color 0.3s;
+        }
+        .nav-link.active, .nav-link:hover {
+            color: #2563eb; /* blue-600 */
+            border-color: #2563eb;
+        }
+        .content-section {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+        .content-section.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .flow-step-text {
+            transition: opacity 0.5s ease-in-out;
+            position: absolute;
+            width: 100%;
+            top: 0;
+            left: 0;
+        }
+        .protocol-card {
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .protocol-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .modal-backdrop {
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            transition: transform 0.3s ease;
+        }
+        .modal-body pre, .code-block pre {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+        .modal-body .annotation {
+            color: #94a3b8;
+            font-style: italic;
+        }
+        .code-block .kwd { color: #f97583; } /* keyword */
+        .code-block .typ { color: #79b8ff; } /* type */
+        .code-block .str { color: #a5d6ff; } /* string */
+        .code-block .com { color: #6a737d; } /* comment */
+        .code-block .fun { color: #b392f0; } /* function */
+        .code-block .var { color: #ffab70; } /* variable */
+        .code-block .imp { color: #89ddff; } /* import/package */
+        .code-block .num { color: #79c0ff; } /* number */
+
+    </style>
+</head>
+<body class="bg-slate-50">
+
+    <header class="bg-white/80 backdrop-blur-lg sticky top-0 z-40 w-full border-b border-slate-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-xl font-bold text-blue-600">WebRTC</span>
+                    <span class="text-xl font-semibold text-slate-800 ml-2">상세 분석 가이드</span>
+                </div>
+                <nav class="hidden md:flex space-x-6 text-sm">
+                    <a href="#intro" class="nav-link text-slate-600 font-medium border-b-2 border-transparent pb-1">소개</a>
+                    <a href="#history" class="nav-link text-slate-600 font-medium border-b-2 border-transparent pb-1">발전과정</a>
+                    <a href="#architecture" class="nav-link text-slate-600 font-medium border-b-2 border-transparent pb-1">아키텍처</a>
+                    <a href="#connection" class="nav-link text-slate-600 font-medium border-b-2 border-transparent pb-1">연결과정</a>
+                    <a href="#protocols" class="nav-link text-slate-600 font-medium border-b-2 border-transparent pb-1">프로토콜</a>
+                    <a href="#codecs" class="nav-link text-slate-600 font-medium border-b-2 border-transparent pb-1">코덱</a>
+                    <a href="#security" class="nav-link text-slate-600 font-medium border-b-2 border-transparent pb-1">보안</a>
+                    <a href="#implementation" class="nav-link text-slate-600 font-medium border-b-2 border-transparent pb-1">구현예제</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+
+        <section id="intro" class="text-center content-section mb-24">
+            <h1 class="text-4xl md:text-5xl font-bold text-slate-900 mb-4">WebRTC: 웹의 실시간 통신 혁명</h1>
+            <p class="max-w-3xl mx-auto text-lg text-slate-600 mb-8">
+                WebRTC(Web Real-Time Communication)는 별도의 플러그인이나 소프트웨어 설치 없이, 웹 브라우저 간에 오디오, 비디오, 데이터를 직접 주고받을 수 있게 하는 W3C와 IETF의 표준 기술입니다. 과거 플러그인 의존성으로 인한 보안, 성능, 호환성 문제를 해결하고 개방형 웹을 위한 표준화되고 안전하며 효율적인 실시간 통신 솔루션을 제공하는 것을 목표로 합니다.
+            </p>
+            <div class="flex justify-center items-center space-x-4 text-slate-800">
+                <div class="flex flex-col items-center">
+                    <div class="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center text-4xl">🌐</div>
+                    <span class="mt-2 font-semibold">브라우저</span>
+                </div>
+                <div class="text-3xl font-light text-slate-400 animate-pulse">↔</div>
+                <div class="flex flex-col items-center">
+                    <div class="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center text-4xl">💻</div>
+                    <span class="mt-2 font-semibold">다른 브라우저</span>
+                </div>
+            </div>
+        </section>
+
+        <section id="history" class="content-section mb-24">
+            <h2 class="text-3xl font-bold text-center text-slate-900 mb-4">WebRTC의 여정</h2>
+            <p class="text-center text-slate-600 mb-12 max-w-2xl mx-auto">WebRTC는 하루아침에 나타난 기술이 아닙니다. 플러그인 기반 통신의 한계에서 시작하여 구글의 전략적 인수, 그리고 W3C와 IETF의 오랜 표준화 노력을 거쳐 지금의 모습에 이르렀습니다.</p>
+            <div class="relative max-w-2xl mx-auto">
+                <div class="absolute left-1/2 -ml-0.5 w-1 h-full bg-slate-200"></div>
+                <div class="space-y-12">
+                    <div class="flex items-center w-full">
+                        <div class="w-1/2 pr-8 text-right">
+                            <p class="text-sm text-slate-500">~2010년</p>
+                            <h3 class="text-lg font-bold text-blue-600">플러그인 시대의 한계</h3>
+                            <p class="mt-1 text-slate-600">Adobe Flash, Microsoft Silverlight 등 브라우저 플러그인에 의존했습니다. 이는 잦은 보안 취약점, 플랫폼(특히 모바일) 간 호환성 부족, 불안정한 성능 등의 문제를 야기했습니다.</p>
+                        </div>
+                        <div class="w-10 h-10 bg-blue-600 rounded-full absolute left-1/2 -translate-x-1/2 flex items-center justify-center text-white font-bold">1</div>
+                    </div>
+                    <div class="flex items-center w-full">
+                        <div class="w-1/2"></div>
+                        <div class="w-1/2 pl-8 text-left">
+                            <p class="text-sm text-slate-500">2010-2011년</p>
+                            <h3 class="text-lg font-bold text-blue-600">구글의 기반 기술 확보 및 공개</h3>
+                            <p class="mt-1 text-slate-600">구글은 RTC 기술 전문 기업인 GIPS(에코 캔슬링, 패킷 손실 은닉 등 핵심 기술 보유)와 비디오 코덱 개발사 On2(VP8 코덱)를 인수했습니다. 이후 이 기술들을 WebRTC라는 이름의 오픈 소스 프로젝트로 공개하며 표준화의 초석을 다졌습니다.</p>
+                        </div>
+                        <div class="w-10 h-10 bg-blue-600 rounded-full absolute left-1/2 -translate-x-1/2 flex items-center justify-center text-white font-bold">2</div>
+                    </div>
+                    <div class="flex items-center w-full">
+                        <div class="w-1/2 pr-8 text-right">
+                            <p class="text-sm text-slate-500">2011년</p>
+                            <h3 class="text-lg font-bold text-blue-600">W3C와 IETF의 표준화 착수</h3>
+                            <p class="mt-1 text-slate-600">두 표준화 기구가 역할을 분담했습니다. W3C는 개발자용 JavaScript API(`RTCPeerConnection` 등)를, IETF의 RTCWEB 워킹 그룹은 통신에 사용될 프로토콜(ICE, DTLS, SRTP 등)의 명세를 정의하는 작업을 시작했습니다.</p>
+                        </div>
+                        <div class="w-10 h-10 bg-blue-600 rounded-full absolute left-1/2 -translate-x-1/2 flex items-center justify-center text-white font-bold">3</div>
+                    </div>
+                    <div class="flex items-center w-full">
+                         <div class="w-1/2"></div>
+                        <div class="w-1/2 pl-8 text-left">
+                            <p class="text-sm text-slate-500">2021년</p>
+                            <h3 class="text-lg font-bold text-blue-600">WebRTC 1.0 공식 표준 등극</h3>
+                            <p class="mt-1 text-slate-600">10년간의 노력 끝에 WebRTC 1.0이 W3C 공식 권고안(Recommendation)으로 발표되었습니다. 이로써 주요 브라우저 간의 상호 운용성이 보장되었고, WebRTC는 웹의 핵심 기술로 자리매김했습니다.</p>
+                        </div>
+                        <div class="w-10 h-10 bg-blue-600 rounded-full absolute left-1/2 -translate-x-1/2 flex items-center justify-center text-white font-bold">4</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="architecture" class="content-section mb-24">
+            <h2 class="text-3xl font-bold text-center text-slate-900 mb-4">WebRTC 아키텍처 심층 분석</h2>
+            <p class="text-center text-slate-600 mb-12 max-w-3xl mx-auto">WebRTC 아키텍처는 크게 웹 API 계층과 브라우저 엔진 계층으로 나뉩니다. 웹 API는 개발자가 JavaScript를 통해 WebRTC 기능을 사용하는 인터페이스를 제공하며, 브라우저 엔진은 실제 미디어 처리, 네트워크 통신, 보안 기능 등을 C++로 구현하여 담당합니다. 각 구성 요소를 클릭하여 자세한 설명을 확인해보세요.</p>
+            <div class="flex flex-col md:flex-row gap-8">
+                <div class="w-full md:w-2/3 bg-white p-6 rounded-lg shadow-md">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                        <div class="col-span-3 p-4 bg-blue-50 rounded-lg">
+                            <h4 class="font-bold text-blue-800">웹 API 계층 (W3C 표준)</h4>
+                            <p class="text-sm text-blue-700">JavaScript를 통해 WebRTC 기능에 접근합니다.</p>
+                        </div>
+                        <div id="arch-gum" class="p-4 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer hover:bg-blue-100 hover:border-blue-500 transition">
+                            <h5 class="font-semibold">getUserMedia()</h5>
+                        </div>
+                        <div id="arch-pc" class="p-4 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer hover:bg-blue-100 hover:border-blue-500 transition">
+                            <h5 class="font-semibold">RTCPeerConnection</h5>
+                        </div>
+                        <div id="arch-dc" class="p-4 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer hover:bg-blue-100 hover:border-blue-500 transition">
+                            <h5 class="font-semibold">RTCDataChannel</h5>
+                        </div>
+
+                        <div class="col-span-3 p-4 bg-slate-100 rounded-lg mt-4">
+                             <h4 class="font-bold text-slate-800">브라우저 엔진 계층 (C++ 구현)</h4>
+                            <p class="text-sm text-slate-700">실제 미디어 처리 및 통신을 담당합니다.</p>
+                        </div>
+                        <div id="arch-voice" class="p-4 border-2 border-dashed border-slate-400 rounded-lg cursor-pointer hover:bg-slate-200 hover:border-slate-500 transition">
+                            <h5 class="font-semibold">음성 엔진</h5>
+                        </div>
+                        <div id="arch-video" class="p-4 border-2 border-dashed border-slate-400 rounded-lg cursor-pointer hover:bg-slate-200 hover:border-slate-500 transition">
+                            <h5 class="font-semibold">비디오 엔진</h5>
+                        </div>
+                        <div id="arch-transport" class="p-4 border-2 border-dashed border-slate-400 rounded-lg cursor-pointer hover:bg-slate-200 hover:border-slate-500 transition">
+                            <h5 class="font-semibold">전송 구성 요소</h5>
+                        </div>
+                    </div>
+                </div>
+                <div id="architecture-details" class="w-full md:w-1/3 p-6 bg-white rounded-lg shadow-md flex flex-col">
+                     <h3 id="details-title" class="text-xl font-bold text-slate-900 mb-2 border-b pb-2">구성 요소를 선택하세요</h3>
+                    <div id="details-text-container" class="flex-grow overflow-y-auto">
+                        <p id="details-text" class="text-slate-600 pt-2 leading-relaxed">다이어그램에서 구성 요소를 클릭하면 여기에 자세한 설명이 표시됩니다.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="connection" class="content-section mb-24">
+            <h2 class="text-3xl font-bold text-center text-slate-900 mb-4">WebRTC 연결 과정 상세 분석</h2>
+            <p class="text-center text-slate-600 mb-12 max-w-3xl mx-auto">WebRTC 연결은 시그널링, 네트워크 탐색(ICE), 보안 연결 수립의 3단계로 이루어집니다. 아래 애니메이션은 이 흐름을 시각적으로 보여줍니다.</p>
+            <div class="bg-white p-8 rounded-lg shadow-md">
+                <div class="flex justify-around items-start mb-4">
+                    <div class="text-center">
+                        <div class="text-5xl">👤</div>
+                        <p class="font-bold mt-2">피어 A</p>
+                    </div>
+                    <div id="signaling-server-visual" class="text-center opacity-50 transition-opacity duration-500">
+                        <div class="text-5xl">🏢</div>
+                        <p class="font-bold mt-2">시그널링 서버</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-5xl">👤</div>
+                        <p class="font-bold mt-2">피어 B</p>
+                    </div>
+                </div>
+
+                <div id="flow-animation-container" class="relative h-24">
+                    <div id="flow-step-1" class="flow-step-text text-center opacity-0">
+                        <h3 class="text-lg font-semibold text-blue-600">1. 시그널링</h3>
+                    </div>
+                    <div id="flow-step-2" class="flow-step-text text-center opacity-0">
+                        <h3 class="text-lg font-semibold text-green-600">2. 네트워크 탐색</h3>
+                    </div>
+                     <div id="flow-step-3" class="flow-step-text text-center opacity-0">
+                        <h3 class="text-lg font-semibold text-purple-600">3. 보안 P2P 채널 수립</h3>
+                    </div>
+                </div>
+                 <div class="text-center">
+                    <button id="restart-animation-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition">애니메이션 다시 시작</button>
+                </div>
+            </div>
+
+            <div class="mt-12">
+                <h3 class="text-2xl font-bold text-center text-slate-800 mb-8">연결 과정 핵심 요소</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h4 class="text-xl font-bold text-slate-900 mb-2">SDP (Offer/Answer)</h4>
+                        <p class="text-slate-600 mb-4">피어들은 시그널링 서버를 통해 통신 설정을 교환합니다. 이 때 사용되는 것이 SDP(Session Description Protocol)입니다. 한 피어가 자신의 미디어 정보를 담아 Offer를 보내면, 다른 피어가 이를 받고 자신의 정보를 담아 Answer로 응답합니다.</p>
+                        <button id="show-sdp-btn" class="font-semibold text-blue-600 hover:underline">SDP Offer 예시 및 구조 보기 &rarr;</button>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h4 class="text-xl font-bold text-slate-900 mb-2">ICE Candidate</h4>
+                        <p class="text-slate-600 mb-4">NAT 환경에서도 P2P 통신이 가능하도록, 각 피어는 연결 가능한 자신의 네트워크 주소 정보(ICE Candidate)를 수집하여 교환합니다. 이를 통해 최적의 통신 경로를 찾게 됩니다.</p>
+                        <button id="show-ice-btn" class="font-semibold text-blue-600 hover:underline">ICE Candidate 예시 및 구조 보기 &rarr;</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="protocols" class="content-section mb-24">
+            <h2 class="text-3xl font-bold text-center text-slate-900 mb-4">핵심 프로토콜 심층 분석</h2>
+             <p class="text-center text-slate-600 mb-12 max-w-3xl mx-auto">WebRTC는 다양한 IETF 표준 프로토콜을 활용하여 실시간 통신 기능을 제공합니다. 각 프로토콜은 특정 역할을 수행하며, 함께 작동하여 안정적이고 안전한 통신을 가능하게 합니다. 각 프로토콜 카드를 클릭하여 상세한 역할을 알아보세요.</p>
+            <div id="protocol-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            </div>
+        </section>
+
+        <section id="codecs" class="content-section mb-24">
+            <h2 class="text-3xl font-bold text-center text-slate-900 mb-4">코덱 비교 분석</h2>
+            <p class="text-center text-slate-600 mb-12 max-w-3xl mx-auto">코덱은 미디어 데이터를 압축하고 해제하여 네트워크를 통해 효율적으로 전송하는 역할을 합니다. 코덱의 선택은 품질과 대역폭 사용량에 직접적인 영향을 미칩니다. 버튼을 눌러 주요 오디오 및 비디오 코덱의 특성을 비교해보세요.</p>
+            <div class="flex justify-center mb-8 space-x-4">
+                <button id="show-audio-codecs" class="codec-btn bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">오디오 코덱</button>
+                <button id="show-video-codecs" class="codec-btn bg-white text-slate-700 font-bold py-2 px-4 rounded-lg border border-slate-300">비디오 코덱</button>
+            </div>
+            <div id="codec-chart-container" class="bg-white p-6 rounded-lg shadow-md">
+                 <div class="chart-container mx-auto">
+                    <canvas id="codecChart"></canvas>
+                </div>
+                <div id="codec-description" class="mt-6 text-slate-600 max-w-3xl mx-auto leading-relaxed"></div>
+            </div>
+        </section>
+
+        <section id="security" class="content-section mb-24">
+            <h2 class="text-3xl font-bold text-center text-slate-900 mb-4">WebRTC 보안 심층 분석</h2>
+            <p class="text-center text-slate-600 mb-12 max-w-3xl mx-auto">WebRTC는 설계 단계부터 보안을 최우선으로 고려하여 개발되었습니다. 종단 간 암호화, 보안 시그널링, 상호 인증 등 다양한 보안 메커니즘을 통해 사용자의 통신을 보호합니다.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-center">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="text-4xl text-green-500 mb-4">🔐</div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">필수 종단간 암호화 (E2EE)</h3>
+                    <p class="text-slate-600 leading-relaxed">WebRTC는 모든 미디어 스트림(SRTP)과 데이터 채널(DTLS 기반 SCTP)에 대해 종단 간 암호화를 강제합니다. 이는 통신 내용이 중간 서버(시그널링, STUN/TURN 서버 포함)를 포함한 그 누구에게도 노출되지 않도록 보장합니다. 암호화는 협상 과정에서 생성된 세션 키를 사용하여 이루어집니다.</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="text-4xl text-green-500 mb-4">🛡️</div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">보안 컨텍스트 및 시그널링</h3>
+                    <p class="text-slate-600 leading-relaxed">WebRTC API는 `getUserMedia`와 같은 민감한 기능에 접근하기 위해 HTTPS와 같이 안전한 출처(Secure Origin)에서만 실행되도록 제한됩니다. 또한 시그널링 과정에서 교환되는 SDP와 ICE Candidate 정보는 잠재적인 정보 유출 및 조작 위험을 방지하기 위해 WSS(WebSocket Secure)와 같은 보안 프로토콜을 통해 암호화하여 전송하는 것이 강력히 권장됩니다.</p>
+                </div>
+                 <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="text-4xl text-green-500 mb-4">🔑</div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">인증 및 무결성 검증</h3>
+                    <p class="text-slate-600 leading-relaxed">DTLS 핸드셰이크 과정에서 각 피어는 자신의 X.509 인증서를 교환하여 신원을 확인하고, 통신 채널의 무결성을 보장합니다. SDP에 포함된 인증서 지문(`a=fingerprint`)을 통해 시그널링 과정에서 전달된 정보와 실제 연결의 보안 정보가 일치하는지 검증하여, 통신 상대를 스푸핑하려는 중간자 공격(MITM)을 효과적으로 방지합니다.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="implementation" class="content-section">
+             <h2 class="text-3xl font-bold text-center text-slate-900 mb-4">구현 예제 (TypeScript & Go)</h2>
+             <p class="text-center text-slate-600 mb-12 max-w-3xl mx-auto">WebRTC의 개념을 실제 코드에 적용하는 방법을 살펴봅니다. 클라이언트 측에서는 TypeScript를 사용하여 타입 안정성을 높이고, 서버 측에서는 Go를 사용하여 간단한 시그널링 서버 및 Pion 라이브러리를 활용한 Go 클라이언트를 구현하는 예제입니다.</p>
+
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h3 class="text-2xl font-bold text-slate-800 mb-4">클라이언트 측: TypeScript 예제</h3>
+                <p class="text-slate-600 mb-4">TypeScript를 사용하면 WebRTC API의 복잡한 객체와 이벤트에 타입을 명시하여 코드의 안정성과 가독성을 크게 향상시킬 수 있습니다. 아래는 기본적인 WebRTC 연결을 설정하는 클래스 예제입니다.</p>
+                <div class="code-block">
+                    <pre><code class="language-typescript"><span class="kwd">interface</span> <span class="typ">SignalingMessage</span> {
+  <span class="var">type</span>: <span class="str">'offer'</span> | <span class="str">'answer'</span> | <span class="str">'candidate'</span>;
+  <span class="var">payload</span>: <span class="typ">any</span>;
+}
+
+<span class="kwd">class</span> <span class="typ">WebRTCClient</span> {
+  <span class="kwd">private</span> <span class="var">pc</span>: <span class="typ">RTCPeerConnection</span>;
+  <span class="kwd">private</span> <span class="var">signaling</span>: <span class="typ">WebSocket</span>;
+
+  <span class="fun">constructor</span>(<span class="var">signalingServerUrl</span>: <span class="typ">string</span>) {
+    <span class="kwd">this</span>.<span class="var">pc</span> = <span class="kwd">new</span> <span class="typ">RTCPeerConnection</span>({
+      <span class="var">iceServers</span>: [{ <span class="var">urls</span>: <span class="str">'stun:stun.l.google.com:19302'</span> }]
+    });
+    
+    <span class="kwd">this</span>.<span class="var">signaling</span> = <span class="kwd">new</span> <span class="typ">WebSocket</span>(<span class="var">signalingServerUrl</span>);
+    
+    <span class="kwd">this</span>.<span class="fun">setupListeners</span>();
+  }
+
+  <span class="kwd">private</span> <span class="fun">setupListeners</span>(): <span class="typ">void</span> {
+    <span class="kwd">this</span>.<span class="var">pc</span>.<span class="var">onicecandidate</span> = (<span class="var">event</span>: <span class="typ">RTCPeerConnectionIceEvent</span>) => {
+      <span class="kwd">if</span> (<span class="var">event</span>.<span class="var">candidate</span>) {
+        <span class="kwd">this</span>.<span class="fun">sendMessage</span>(<span class="str">'candidate'</span>, <span class="var">event</span>.<span class="var">candidate</span>);
+      }
+    };
+
+    <span class="kwd">this</span>.<span class="var">pc</span>.<span class="var">ontrack</span> = (<span class="var">event</span>: <span class="typ">RTCTrackEvent</span>) => {
+      <span class="com">// 수신된 원격 미디어 트랙 처리 (예: video 엘리먼트에 추가)</span>
+      <span class="var">console</span>.<span class="fun">log</span>(<span class="str">'Remote track received:'</span>, <span class="var">event</span>.<span class="var">track</span>);
+    };
+
+    <span class="kwd">this</span>.<span class="var">signaling</span>.<span class="var">onmessage</span> = <span class="kwd">async</span> (<span class="var">messageEvent</span>: <span class="typ">MessageEvent</span>) => {
+      <span class="kwd">try</span> {
+        <span class="kwd">const</span> { <span class="var">type</span>, <span class="var">payload</span> } = <span class="typ">JSON</span>.<span class="fun">parse</span>(<span class="var">messageEvent</span>.<span class="var">data</span>) <span class="kwd">as</span> <span class="typ">SignalingMessage</span>;
+      
+        <span class="kwd">switch</span> (<span class="var">type</span>) {
+          <span class="kwd">case</span> <span class="str">'offer'</span>:
+            <span class="kwd">await</span> <span class="kwd">this</span>.<span class="var">pc</span>.<span class="fun">setRemoteDescription</span>(<span class="kwd">new</span> <span class="typ">RTCSessionDescription</span>(<span class="var">payload</span>));
+            <span class="kwd">const</span> <span class="var">answer</span> = <span class="kwd">await</span> <span class="kwd">this</span>.<span class="var">pc</span>.<span class="fun">createAnswer</span>();
+            <span class="kwd">await</span> <span class="kwd">this</span>.<span class="var">pc</span>.<span class="fun">setLocalDescription</span>(<span class="var">answer</span>);
+            <span class="kwd">this</span>.<span class="fun">sendMessage</span>(<span class="str">'answer'</span>, <span class="var">answer</span>);
+            <span class="kwd">break</span>;
+          <span class="kwd">case</span> <span class="str">'answer'</span>:
+             <span class="kwd">await</span> <span class="kwd">this</span>.<span class="var">pc</span>.<span class="fun">setRemoteDescription</span>(<span class="kwd">new</span> <span class="typ">RTCSessionDescription</span>(<span class="var">payload</span>));
+             <span class="kwd">break</span>;
+          <span class="kwd">case</span> <span class="str">'candidate'</span>:
+            <span class="kwd">await</span> <span class="kwd">this</span>.<span class="var">pc</span>.<span class="fun">addIceCandidate</span>(<span class="kwd">new</span> <span class="typ">RTCIceCandidate</span>(<span class="var">payload</span>));
+            <span class="kwd">break</span>;
+        }
+      } <span class="kwd">catch</span> (<span class="var">error</span>) {
+        <span class="var">console</span>.<span class="fun">error</span>(<span class="str">'Failed to parse signaling message:'</span>, <span class="var">error</span>);
+      }
+    };
+  }
+
+  <span class="kwd">public</span> <span class="kwd">async</span> <span class="fun">startCall</span>(): <span class="typ">Promise</span>&lt;<span class="typ">void</span>&gt; {
+    <span class="com">// 로컬 미디어 트랙 추가 (예시)</span>
+    <span class="com">// this.pc.addTrack(localStream.getAudioTracks()[0], localStream);</span>
+    <span class="kwd">const</span> <span class="var">offer</span> = <span class="kwd">await</span> <span class="kwd">this</span>.<span class="var">pc</span>.<span class="fun">createOffer</span>();
+    <span class="kwd">await</span> <span class="kwd">this</span>.<span class="var">pc</span>.<span class="fun">setLocalDescription</span>(<span class="var">offer</span>);
+    <span class="kwd">this</span>.<span class="fun">sendMessage</span>(<span class="str">'offer'</span>, <span class="var">offer</span>);
+  }
+
+  <span class="kwd">private</span> <span class="fun">sendMessage</span>(<span class="var">type</span>: <span class="typ">SignalingMessage</span>[<span class="str">'type'</span>], <span class="var">payload</span>: <span class="typ">any</span>): <span class="typ">void</span> {
+    <span class="kwd">this</span>.<span class="var">signaling</span>.<span class="fun">send</span>(<span class="typ">JSON</span>.<span class="fun">stringify</span>({ <span class="var">type</span>, <span class="var">payload</span> }));
+  }
+}
+</code></pre>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h3 class="text-2xl font-bold text-slate-800 mb-4">서버 측: Go 시그널링 서버 예제</h3>
+                <p class="text-slate-600 mb-4">시그널링 서버는 WebRTC 표준에 포함되지 않지만, 피어 간의 연결 설정을 위해 필수적입니다. Go 언어와 Gorilla WebSocket 라이브러리를 사용하면 효율적인 시그널링 서버를 간단하게 구축할 수 있습니다. 아래 코드는 두 명의 클라이언트를 연결하고 메시지를 서로에게 전달하는 가장 기본적인 형태의 서버입니다.</p>
+                <div class="code-block">
+                    <pre><code class="language-go"><span class="imp">package</span> <span class="var">main</span>
+
+<span class="imp">import</span> (
+	<span class="str">"log"</span>
+	<span class="str">"net/http"</span>
+	<span class="str">"sync"</span>
+
+	<span class="str">"github.com/gorilla/websocket"</span>
+)
+
+<span class="kwd">var</span> <span class="var">clients</span> = <span class="kwd">make</span>(<span class="kwd">map</span>[*<span class="typ">websocket.Conn</span>]<span class="typ">bool</span>)
+<span class="kwd">var</span> <span class="var">broadcast</span> = <span class="kwd">make</span>(<span class="kwd">chan</span> []<span class="typ">byte</span>)
+<span class="kwd">var</span> <span class="var">upgrader</span> = <span class="typ">websocket.Upgrader</span>{
+	<span class="fun">CheckOrigin</span>: <span class="kwd">func</span>(<span class="var">r</span> *<span class="typ">http.Request</span>) <span class="typ">bool</span> {
+		<span class="kwd">return</span> <span class="kwd">true</span> <span class="com">// 모든 오리진 허용 (실제 환경에서는 특정 오리진만 허용)</span>
+	},
+}
+<span class="kwd">var</span> <span class="var">mutex</span> = &<span class="typ">sync.Mutex</span>{}
+
+<span class="kwd">func</span> <span class="fun">handleConnections</span>(<span class="var">w</span> <span class="typ">http.ResponseWriter</span>, <span class="var">r</span> *<span class="typ">http.Request</span>) {
+	<span class="var">ws</span>, <span class="var">err</span> := <span class="var">upgrader</span>.<span class="fun">Upgrade</span>(<span class="var">w</span>, <span class="var">r</span>, <span class="kwd">nil</span>)
+	<span class="kwd">if</span> <span class="var">err</span> != <span class="kwd">nil</span> {
+		<span class="var">log</span>.<span class="fun">Println</span>(<span class="str">"Upgrade error:"</span>, <span class="var">err</span>)
+		<span class="kwd">return</span>
+	}
+	<span class="kwd">defer</span> <span class="var">ws</span>.<span class="fun">Close</span>()
+
+	<span class="var">mutex</span>.<span class="fun">Lock</span>()
+	<span class="var">clients</span>[<span class="var">ws</span>] = <span class="kwd">true</span>
+	<span class="var">mutex</span>.<span class="fun">Unlock</span>()
+
+	<span class="kwd">log</span>.<span class="fun">Println</span>(<span class="str">"Client connected"</span>)
+
+	<span class="kwd">for</span> {
+		_, <span class="var">msg</span>, <span class="var">err</span> := <span class="var">ws</span>.<span class="fun">ReadMessage</span>()
+		<span class="kwd">if</span> <span class="var">err</span> != <span class="kwd">nil</span> {
+			<span class="var">log</span>.<span class="fun">Printf</span>(<span class="str">"Read error: %v"</span>, <span class="var">err</span>)
+			<span class="var">mutex</span>.<span class="fun">Lock</span>()
+			<span class="kwd">delete</span>(<span class="var">clients</span>, <span class="var">ws</span>)
+			<span class="var">mutex</span>.<span class="fun">Unlock</span>()
+			<span class="kwd">break</span>
+		}
+		<span class="var">broadcast</span> <- <span class="var">msg</span>
+	}
+}
+
+<span class="kwd">func</span> <span class="fun">handleMessages</span>() {
+	<span class="kwd">for</span> {
+		<span class="var">msg</span> := <-<span class="var">broadcast</span>
+		<span class="var">mutex</span>.<span class="fun">Lock</span>()
+		<span class="kwd">for</span> <span class="var">client</span> := <span class="kwd">range</span> <span class="var">clients</span> {
+			<span class="var">err</span> := <span class="var">client</span>.<span class="fun">WriteMessage</span>(<span class="typ">websocket.TextMessage</span>, <span class="var">msg</span>)
+			<span class="kwd">if</span> <span class="var">err</span> != <span class="kwd">nil</span> {
+				<span class="var">log</span>.<span class="fun">Printf</span>(<span class="str">"Write error: %v"</span>, <span class="var">err</span>)
+				<span class="var">client</span>.<span class="fun">Close</span>()
+				<span class="kwd">delete</span>(<span class="var">clients</span>, <span class="var">client</span>)
+			}
+		}
+		<span class="var">mutex</span>.<span class="fun">Unlock</span>()
+	}
+}
+
+<span class="kwd">func</span> <span class="fun">main</span>() {
+	<span class="var">http</span>.<span class="fun">HandleFunc</span>(<span class="str">"/ws"</span>, <span class="var">handleConnections</span>)
+	<span class="kwd">go</span> <span class="fun">handleMessages</span>()
+	<span class="var">log</span>.<span class="fun">Println</span>(<span class="str">"HTTP server started on :8000"</span>)
+	<span class="var">err</span> := <span class="var">http</span>.<span class="fun">ListenAndServe</span>(<span class="str">":8000"</span>, <span class="kwd">nil</span>)
+	<span class="kwd">if</span> <span class="var">err</span> != <span class="kwd">nil</span> {
+		<span class="var">log</span>.<<span class="fun">Fatal</span>(<span class="str">"ListenAndServe: "</span>, <span class="var">err</span>)
+	}
+}
+</code></pre>
+                </div>
+            </div>
+
+             <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-2xl font-bold text-slate-800 mb-4">Go 클라이언트 (Pion) 예제</h3>
+                <p class="text-slate-600 mb-4">Pion은 Go 언어로 작성된 WebRTC 구현체로, Go 애플리케이션 내에서 WebRTC 클라이언트 또는 고급 서버 기능을 구현할 때 유용합니다. 아래는 Pion을 사용하여 시그널링 서버와 통신하며 간단한 데이터 채널 연결을 시도하는 예제입니다. 실제 사용 시에는 시그널링 로직(SDP 및 ICE Candidate 교환)을 이전 Go 서버 예제 또는 유사한 시그널링 메커니즘과 연동해야 합니다.</p>
+                <div class="code-block">
+                    <pre><code class="language-go"><span class="imp">package</span> <span class="var">main</span>
+
+<span class="imp">import</span> (
+	<span class="str">"bufio"</span>
+	<span class="str">"encoding/json"</span>
+	<span class="str">"fmt"</span>
+	<span class="str">"log"</span>
+	<span class="str">"os"</span>
+	<span class="str">"strings"</span>
+	<span class="str">"time"</span>
+
+	<span class="str">"github.com/pion/webrtc/v3"</span>
+	<span class="str">"github.com/gorilla/websocket"</span> <span class="com">// 시그널링을 위해 사용 (예시)</span>
+)
+
+<span class="kwd">func</span> <span class="fun">main</span>() {
+	<span class="var">config</span> := <span class="typ">webrtc.Configuration</span>{
+		<span class="typ">ICEServers</span>: []<span class="typ">webrtc.ICEServer</span>{
+			{
+				<span class="typ">URLs</span>: []<span class="typ">string</span>{<span class="str">"stun:stun.l.google.com:19302"</span>},
+			},
+		},
+	}
+
+	<span class="var">peerConnection</span>, <span class="var">err</span> := <span class="typ">webrtc.NewPeerConnection</span>(<span class="var">config</span>)
+	<span class="kwd">if</span> <span class="var">err</span> != <span class="kwd">nil</span> {
+		<span class="var">panic</span>(<span class="var">err</span>)
+	}
+	<span class="kwd">defer</span> <span class="kwd">func</span>() {
+		<span class="kwd">if</span> <span class="var">err</span> := <span class="var">peerConnection</span>.<span class="fun">Close</span>(); <span class="var">err</span> != <span class="kwd">nil</span> {
+			<span class="var">fmt</span>.<span class="fun">Printf</span>(<span class="str">"cannot close peerConnection: %v\n"</span>, <span class="var">err</span>)
+		}
+	}()
+
+	<span class="var">dataChannel</span>, <span class="var">err</span> := <span class="var">peerConnection</span>.<span class="fun">CreateDataChannel</span>(<span class="str">"data"</span>, <span class="kwd">nil</span>)
+	<span class="kwd">if</span> <span class="var">err</span> != <span class="kwd">nil</span> {
+		<span class="var">panic</span>(<span class="var">err</span>)
+	}
+
+	<span class="var">peerConnection</span>.<span class="fun">OnICEConnectionStateChange</span>(<span class="kwd">func</span>(<span class="var">connectionState</span> <span class="typ">webrtc.ICEConnectionState</span>) {
+		<span class="var">fmt</span>.<span class="fun">Printf</span>(<span class="str">"ICE Connection State has changed: %s\n"</span>, <span class="var">connectionState</span>.<span class="fun">String</span>())
+	})
+    
+	<span class="var">dataChannel</span>.<span class="fun">OnOpen</span>(<span class="kwd">func</span>() {
+		<span class="var">fmt</span>.<span class="fun">Printf</span>(<span class="str">"Data channel '%s'-'%d' open. Random messages will now be sent to any connected DataChannels every 5 seconds\n"</span>, <span class="var">dataChannel</span>.<span class="fun">Label</span>(), <span class="var">dataChannel</span>.<span class="fun">ID</span>())
+		<span class="kwd">for</span> <span class="var">range</span> <span class="var">time</span>.<span class="fun">NewTicker</span>(<span class="num">5</span> * <span class="var">time</span>.<span class="typ">Second</span>).<span class="typ">C</span> {
+			<span class="var">message</span> := <span class="str">"Hello from Pion Go Client!"</span>
+			<span class="var">fmt</span>.<span class="fun">Printf</span>(<span class="str">"Sending message: %s\n"</span>, <span class="var">message</span>)
+			<span class="var">sendErr</span> := <span class="var">dataChannel</span>.<span class="fun">SendText</span>(<span class="var">message</span>)
+			<span class="kwd">if</span> <span class="var">sendErr</span> != <span class="kwd">nil</span> {
+				<span class="var">panic</span>(<span class="var">sendErr</span>)
+			}
+		}
+	})
+
+	<span class="var">dataChannel</span>.<span class="fun">OnMessage</span>(<span class="kwd">func</span>(<span class="var">msg</span> <span class="typ">webrtc.DataChannelMessage</span>) {
+		<span class="var">fmt</span>.<span class="fun">Printf</span>(<span class="str">"Message from DataChannel '%s': '%s'\n"</span>, <span class="var">dataChannel</span>.<span class="fun">Label</span>(), <span class="typ">string</span>(<span class="var">msg</span>.<span class="typ">Data</span>))
+	})
+
+	<span class="com">// --- 시그널링 로직 (Offer/Answer, ICE Candidate 교환) 시작 ---</span>
+	<span class="com">// 이 부분은 실제 시그널링 서버와 연동하여 구현해야 합니다.</span>
+	<span class="com">// 예시: WebSocket을 사용한 메시지 교환</span>
+	<span class="var">wsConn</span>, _, <span class="var">wsErr</span> := <span class="typ">websocket.DefaultDialer</span>.<span class="fun">Dial</span>(<span class="str">"ws://localhost:8000/ws"</span>, <span class="kwd">nil</span>)
+	<span class="kwd">if</span> <span class="var">wsErr</span> != <span class="kwd">nil</span> {
+		<span class="var">log</span>.<span class="fun">Fatalf</span>(<span class="str">"WebSocket dial error: %v"</span>, <span class="var">wsErr</span>)
+	}
+	<span class="kwd">defer</span> <span class="var">wsConn</span>.<span class="fun">Close</span>()
+	<span class="var">log</span>.<span class="fun">Println</span>(<span class="str">"Connected to signaling server"</span>)
+
+	<span class="var">peerConnection</span>.<span class="fun">OnICECandidate</span>(<span class="kwd">func</span>(<span class="var">c</span> *<span class="typ">webrtc.ICECandidate</span>) {
+		<span class="kwd">if</span> <span class="var">c</span> == <span class="kwd">nil</span> { <span class="kwd">return</span> }
+		<span class="var">candidateJSON</span>, _ := <span class="typ">json.Marshal</span>(<span class="var">c</span>.<span class="fun">ToJSON</span>())
+		<span class="var">message</span> := <span class="kwd">map</span>[<span class="typ">string</span>]<span class="typ">interface</span>{}{<span class="str">"type"</span>: <span class="str">"candidate"</span>, <span class="str">"payload"</span>: <span class="var">c</span>.<span class="fun">ToJSON</span>()}
+		<span class="var">msgBytes</span>, _ := <span class="typ">json.Marshal</span>(<span class="var">message</span>)
+		<span class="var">wsConn</span>.<span class="fun">WriteMessage</span>(<span class="typ">websocket.TextMessage</span>, <span class="var">msgBytes</span>)
+		<span class="var">fmt</span>.<span class="fun">Println</span>(<span class="str">"Sent ICE Candidate: "</span>, <span class="typ">string</span>(<span class="var">candidateJSON</span>))
+	})
+
+	<span class="com">// Offer 생성 및 전송 (만약 연결을 시작하는 측이라면)</span>
+	<span class="com">// offer, err := peerConnection.CreateOffer(nil)</span>
+	<span class="com">// if err != nil { panic(err) }</span>
+	<span class="com">// peerConnection.SetLocalDescription(offer)</span>
+    <span class="com">// offerJSON, _ := json.Marshal(offer)</span>
+    <span class="com">// message := map[string]interface{}{"type": "offer", "payload": offer}</span>
+    <span class="com">// msgBytes, _ := json.Marshal(message)</span>
+    <span class="com// wsConn.WriteMessage(websocket.TextMessage, msgBytes)</span>
+    <span class="com">// fmt.Println("Sent Offer")</span>
+
+	<span class="kwd">go</span> <span class="kwd">func</span>() {
+		<span class="kwd">for</span> {
+			_, <span class="var">message</span>, <span class="var">err</span> := <span class="var">wsConn</span>.<span class="fun">ReadMessage</span>()
+			<span class="kwd">if</span> <span class="var">err</span> != <span class="kwd">nil</span> {
+				<span class="var">log</span>.<span class="fun">Println</span>(<span class="str">"WebSocket read error:"</span>, <span class="var">err</span>)
+				<span class="kwd">return</span>
+			}
+			<span class="kwd">var</span> <span class="var">sigMsg</span> <span class="kwd">map</span>[<span class="typ">string</span>]<span class="typ">interface</span>{}
+			<span class="typ">json.Unmarshal</span>(<span class="var">message</span>, &<span class="var">sigMsg</span>)
+
+			<span class="kwd">switch</span> <span class="var">sigMsg</span>[<span class="str">"type"</span>] {
+			<span class="kwd">case</span> <span class="str">"offer"</span>:
+				<span class="var">offer</span> := <span class="typ">webrtc.SessionDescription</span>{}
+				<span class="var">payloadBytes</span>, _ := <span class="typ">json.Marshal</span>(<span class="var">sigMsg</span>[<span class="str">"payload"</span>])
+				<span class="typ">json.Unmarshal</span>(<span class="var">payloadBytes</span>, &<span class="var">offer</span>)
+				<span class="var">peerConnection</span>.<span class="fun">SetRemoteDescription</span>(<span class="var">offer</span>)
+				<span class="var">answer</span>, <span class="var">err</span> := <span class="var">peerConnection</span>.<span class="fun">CreateAnswer</span>(<span class="kwd">nil</span>)
+				<span class="kwd">if</span> <span class="var">err</span> != <span class="kwd">nil</span> { <span class="var">panic</span>(<span class="var">err</span>) }
+				<span class="var">peerConnection</span>.<span class="fun">SetLocalDescription</span>(<span class="var">answer</span>)
+                <span class="var">answerMsg</span> := <span class="kwd">map</span>[<span class="typ">string</span>]<span class="typ">interface</span>{}{<span class="str">"type"</span>: <span class="str">"answer"</span>, <span class="str">"payload"</span>: <span class="var">answer</span>}
+                <span class="var">answerBytes</span>, _ := <span class="typ">json.Marshal</span>(<span class="var">answerMsg</span>)
+				<span class="var">wsConn</span>.<span class="fun">WriteMessage</span>(<span class="typ">websocket.TextMessage</span>, <span class="var">answerBytes</span>)
+				<span class="var">fmt</span>.<span class="fun">Println</span>(<span class="str">"Received Offer, Sent Answer"</span>)
+			<span class="kwd">case</span> <span class="str">"answer"</span>:
+				<span class="var">answer</span> := <span class="typ">webrtc.SessionDescription</span>{}
+                <span class="var">payloadBytes</span>, _ := <span class="typ">json.Marshal</span>(<span class="var">sigMsg</span>[<span class="str">"payload"</span>])
+				<span class="typ">json.Unmarshal</span>(<span class="var">payloadBytes</span>, &<span class="var">answer</span>)
+				<span class="var">peerConnection</span>.<span class="fun">SetRemoteDescription</span>(<span class="var">answer</span>)
+				<span class="var">fmt</span>.<span class="fun">Println</span>(<span class="str">"Received Answer"</span>)
+			<span class="kwd">case</span> <span class="str">"candidate"</span>:
+				<span class="var">candidate</span> := <span class="typ">webrtc.ICECandidateInit</span>{}
+                <span class="var">payloadBytes</span>, _ := <span class="typ">json.Marshal</span>(<span class="var">sigMsg</span>[<span class="str">"payload"</span>])
+				<span class="typ">json.Unmarshal</span>(<span class="var">payloadBytes</span>, &<span class="var">candidate</span>)
+				<span class="var">peerConnection</span>.<span class="fun">AddICECandidate</span>(<span class="var">candidate</span>)
+				<span class="var">fmt</span>.<span class="fun">Println</span>(<span class="str">"Received ICE Candidate"</span>)
+			}
+		}
+	}()
+	<span class="com">// --- 시그널링 로직 끝 ---</span>
+
+	<span class="var">fmt</span>.<span class="fun">Println</span>(<span class="str">"Pion WebRTC client started. Press Ctrl+C to exit."</span>)
+	<span class="var">select</span> {} <span class="com">// 프로그램이 종료되지 않도록 대기</span>
+}
+</code></pre>
+                </div>
+            </div>
+
+        </section>
+
+     </main>
+
+     <div id="info-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 modal-backdrop opacity-0 pointer-events-none">
+         <div class="modal-content bg-white rounded-lg shadow-xl w-11/12 max-w-2xl p-6 md:p-8 transform scale-95">
+             <div class="flex justify-between items-center border-b pb-3 mb-4">
+                 <h3 id="modal-title" class="text-2xl font-bold text-slate-800"></h3>
+                 <button id="modal-close-btn" class="text-slate-500 hover:text-slate-800 text-2xl">&times;</button>
+             </div>
+             <div id="modal-body" class="text-slate-600 leading-relaxed max-h-[70vh] overflow-y-auto">
+             </div>
+         </div>
+     </div>
+
+     <script>
+     document.addEventListener('DOMContentLoaded', () => {
+         const architectureData = {
+             'arch-gum': {
+                 title: 'MediaDevices.getUserMedia()',
+                 text: `사용자의 카메라, 마이크 등 미디어 입력 장치에 접근하기 위한 API입니다. 보안상의 이유로 HTTPS와 같은 보안 컨텍스트에서만 작동하며, 사용자에게 명시적인 권한 허용을 요청합니다. 호출 시 Promise를 반환하며, 성공 시 미디어 트랙들이 담긴 <code>MediaStream</code> 객체를 전달합니다. <code>constraints</code> 객체를 통해 원하는 해상도, 프레임레이트 등을 지정할 수 있습니다.`
+             },
+             'arch-pc': {
+                 title: 'RTCPeerConnection',
+                 text: `두 피어 간의 P2P 연결을 생성하고 관리하는 WebRTC의 핵심 인터페이스입니다. Offer/Answer 모델과 SDP를 사용하여 미디어 설정을 협상하고, ICE 프레임워크를 통해 네트워크 경로를 탐색하며, DTLS 핸드셰이크로 보안 채널을 수립하고, SRTP를 통해 미디어를 전송하는 모든 복잡한 과정을 총괄합니다. 개발자는 이 인터페이스의 이벤트와 메서드(<code>onicecandidate</code>, <code>ontrack</code>, <code>addIceCandidate()</code>, <code>createOffer()</code>, <code>setLocalDescription()</code>, <code>setRemoteDescription()</code> 등)를 통해 전체 연결 상태를 제어합니다.`
+             },
+             'arch-dc': {
+                 title: 'RTCDataChannel',
+                 text: `미디어 스트림과 별개로 임의의 데이터를 P2P로 전송할 수 있는 양방향 채널입니다. 내부적으로 SCTP 프로토콜 위에서 동작하며, 이를 통해 여러 개의 독립적인 데이터 채널을 하나의 연결 위에서 사용할 수 있습니다. 생성 시 신뢰성(<code>reliable</code>) 및 순서 보장(<code>ordered</code>) 여부를 설정할 수 있어, 채팅 메시지(신뢰성)부터 실시간 게임 데이터(낮은 지연 우선)까지 다양한 용도로 활용됩니다.`
+             },
+             'arch-voice': {
+                 title: '음성 엔진 (Voice Engine)',
+                 text: `고품질의 실시간 음성 통신을 위한 핵심 구성 요소입니다. 하드웨어의 오디오 장치로부터 데이터를 받아, AEC(음향 반향 제거), NS(배경 소음 억제), AGC(자동 이득 조절) 등의 고급 신호 처리 기술을 적용합니다. 이후 Opus나 G.711 같은 오디오 코덱으로 데이터를 압축하고, NetEQ와 같은 정교한 지터 버퍼를 통해 네트워크 지연 변화에 대응하여 안정적인 오디오를 제공합니다.`
+             },
+             'arch-video': {
+                 title: '비디오 엔진 (Video Engine)',
+                 text: `실시간 비디오 통신을 위한 구성 요소입니다. 카메라로부터 영상 데이터를 받아 VP8, H.246 등의 비디오 코덱으로 압축합니다. 네트워크 상태에 따라 인코딩 비트레이트를 동적으로 조절하는 대역폭 적응(adaptive bitrate) 로직, 패킷 손실 시 화면 깨짐을 최소화하는 오류 은닉(error concealment) 기술, 이미지 향상 필터 등을 포함하여 최적의 비디오 품질을 유지하는 역할을 합니다.`
+             },
+             'arch-transport': {
+                 title: '전송 구성 요소 (Transport Components)',
+                 text: `실제 암호화된 데이터 패킷을 네트워크를 통해 주고받는 역할을 담당하는 프로토콜 스택입니다. UDP 위에서 ICE(STUN/TURN)를 사용하여 NAT 환경을 통과할 수 있는 경로를 찾고, DTLS를 통해 통신 채널의 보안과 무결성을 확보하며, SRTP/SRTCP로 미디어 패킷을 안전하게 전송합니다. 데이터 채널의 경우 DTLS 위에서 SCTP를 사용합니다.`
+             }
+         };
+
+         const archDetailsTitle = document.getElementById('details-title');
+         const archDetailsText = document.getElementById('details-text');
+         const archButtons = document.querySelectorAll('#architecture .cursor-pointer');
+
+         archButtons.forEach(button => {
+             button.addEventListener('click', (e) => {
+                 const id = e.currentTarget.id;
+                 const data = architectureData[id];
+                 archDetailsTitle.textContent = data.title;
+                 archDetailsText.innerHTML = data.text.replace(/<code>/g, '<code class="bg-slate-200 text-slate-800 rounded px-1 py-0.5 font-mono text-sm">').replace(/<\/code>/g, '</code>');
+
+                 archButtons.forEach(btn => btn.classList.remove('bg-blue-100', 'border-blue-500', 'bg-slate-200', 'border-slate-500'));
+                 
+                 const isApiLayer = e.currentTarget.classList.contains('border-blue-300');
+                 if (isApiLayer) {
+                     e.currentTarget.classList.add('bg-blue-100', 'border-blue-500');
+                 } else {
+                     e.currentTarget.classList.add('bg-slate-200', 'border-slate-500');
+                 }
+             });
+         });
+         
+         const modal = document.getElementById('info-modal');
+         const modalTitle = document.getElementById('modal-title');
+         const modalBody = document.getElementById('modal-body');
+         const modalCloseBtn = document.getElementById('modal-close-btn');
+
+         const openModal = (title, content) => {
+             modalTitle.innerHTML = title;
+             modalBody.innerHTML = content.replace(/<code>/g, '<code class="bg-slate-200 text-slate-800 rounded px-1 py-0.5 font-mono text-sm">').replace(/<\/code>/g, '</code>');
+             modal.classList.remove('opacity-0', 'pointer-events-none');
+             modal.querySelector('.modal-content').classList.remove('scale-95');
+         };
+
+         const closeModal = () => {
+             modal.classList.add('opacity-0', 'pointer-events-none');
+             modal.querySelector('.modal-content').classList.add('scale-95');
+         };
+
+         modalCloseBtn.addEventListener('click', closeModal);
+         modal.addEventListener('click', (e) => {
+             if (e.target === modal) {
+                 closeModal();
+             }
+         });
+
+         const protocolData = {
+             SDP: { fullName: 'Session Description Protocol', rfc: 'RFC 8866', description: '미디어 세션의 초기화 파라미터를 기술하기 위한 텍스트 기반 프로토콜입니다. 어떤 코덱을 사용할지, 어떤 IP 주소와 포트로 통신할지, 암호화는 어떻게 할지 등 통신에 필요한 거의 모든 메타데이터를 담아 Offer/Answer 모델을 통해 교환됩니다.' },
+             ICE: { fullName: 'Interactive Connectivity Establishment', rfc: 'RFC 8445', description: 'NAT나 방화벽 뒤에 있는 피어들 간에 최적의 통신 경로를 찾아내기 위한 프레임워크입니다. Host, Server Reflexive(srflx), Relayed(relay) 등 다양한 종류의 후보 주소를 수집하고, 이들 간의 연결성을 체계적으로 테스트(connectivity checks)하여 P2P 연결을 수립합니다.' },
+             STUN: { fullName: 'Session Traversal Utilities for NAT', rfc: 'RFC 8489', description: '피어가 NAT 장비 뒤에 있을 경우, 자신의 공인 IP 주소와 포트(Server Reflexive 주소)를 발견하기 위해 사용되는 프로토콜입니다. 또한 ICE의 연결성 테스트 과정에서 \'살아있는지\' 확인하는 핑(ping) 역할도 수행합니다.' },
+             TURN: { fullName: 'Traversal Using Relays around NAT', rfc: 'RFC 8656', description: '두 피어 간의 직접적인 P2P 연결이 불가능한 대칭형(Symmetric) NAT 환경 등에서 최후의 수단으로 사용됩니다. 공용 인터넷에 위치한 TURN 서버가 두 피어 간의 모든 미디어 트래픽을 중계해주는 역할을 합니다.' },
+             RTP: { fullName: 'Real-time Transport Protocol', rfc: 'RFC 3550', description: '오디오, 비디오와 같은 실시간 데이터를 전송하기 위해 설계된 표준 프로토콜입니다. 패킷에 타임스탬프와 시퀀스 번호를 부여하여 수신 측에서 지연 변화(jitter)에 대응하고 패킷 순서를 재조립할 수 있도록 돕습니다. 보통 UDP 위에서 동작합니다.' },
+             RTCP: { fullName: 'RTP Control Protocol', rfc: 'RFC 3550', description: 'RTP 세션을 제어하고 모니터링하기 위한 프로토콜입니다. 패킷 손실률, 지터, 왕복 시간(RTT) 등 통계 정보를 교환하여 통화 품질을 측정하고, 네트워크 상태에 따라 송신 측이 비트레이트를 조절하는 등 QoS(Quality of Service)를 관리하는 데 핵심적인 역할을 합니다.' },
+             SCTP: { fullName: 'Stream Control Transmission Protocol', rfc: 'RFC 9260', description: 'RTCDataChannel의 기반이 되는 전송 프로토콜입니다. 하나의 연결 내에서 여러 개의 독립적인 스트림을 제공하며, 각 스트림별로 신뢰성 및 순서 보장 여부를 다르게 설정할 수 있습니다. TCP와 유사한 신뢰성을 제공하면서도 Head-of-Line 블로킹 문제를 해결한 것이 특징입니다.' },
+             DTLS: { fullName: 'Datagram Transport Layer Security', rfc: 'RFC 9147 (DTLS 1.3)', description: 'UDP와 같이 신뢰할 수 없는 데이터그램 프로토콜에 TLS의 보안 기능을 제공합니다. WebRTC에서는 PeerConnection의 모든 데이터(SCTP 패킷 포함)를 암호화하고, SRTP에서 사용할 마스터 키를 안전하게 교환하는 데 사용되는 핵심 보안 프로토콜입니다.' },
+             SRTP: { fullName: 'Secure Real-time Transport Protocol', rfc: 'RFC 3711', description: 'RTP 패킷을 암호화하고 인증하여 미디어 스트림의 기밀성과 무결성을 보장하는 보안 프로토콜입니다. DTLS 핸드셰이크를 통해 생성된 키를 사용하여 미디어 페이로드(payload)를 암호화하고, 재생 공격(replay attack)을 방지하는 기능을 제공합니다.' }
+         };
+
+         const protocolGrid = document.getElementById('protocol-grid');
+         Object.keys(protocolData).forEach(key => {
+             const p = protocolData[key];
+             const card = document.createElement('div');
+             card.className = 'protocol-card bg-white p-4 rounded-lg shadow-md text-center cursor-pointer';
+             card.innerHTML = `<h3 class="text-lg font-bold text-slate-800">${key}</h3><p class="text-sm text-slate-500">${p.fullName}</p>`;
+             card.addEventListener('click', () => {
+                 const content = `<p>${p.description}</p><p class="mt-4 text-sm font-semibold text-blue-600">관련 표준: ${p.rfc}</p>`;
+                 openModal(`${key} (${p.fullName})`, content);
+             });
+             protocolGrid.appendChild(card);
+         });
+
+         document.getElementById('show-sdp-btn').addEventListener('click', () => {
+             const title = "SDP Offer 예시 및 분석";
+             const content = `
+                 <p class="mb-4">SDP(Session Description Protocol)는 미디어 세션의 속성을 설명하는 텍스트 형식입니다. 아래는 WebRTC 오디오 통화의 간단한 Offer 예시입니다.</p>
+                 <pre>v=0 <span class="annotation">; SDP 프로토콜 버전</span>
+o=- 4611731400431486146 2 IN IP4 127.0.0.1 <span class="annotation">; 발신자 정보 (사용자명, 세션ID, 버전, 네트워크타입, 주소타입, 주소)</span>
+s=- <span class="annotation">; 세션 이름</span>
+t=0 0 <span class="annotation">; 세션 활성 시간 (0 0은 영구)</span>
+a=msid-semantic: WMS <span class="annotation">; MediaStream 식별자 의미론</span>
+m=audio 9 UDP/TLS/RTP/SAVPF 111 0 8 101 <span class="annotation">; 미디어 설명 (타입, 포트, 프로토콜, 코덱 payload type 리스트)</span>
+c=IN IP4 0.0.0.0 <span class="annotation">; 연결 정보 (네트워크타입, 주소타입, 주소)</span>
+a=rtcp:9 IN IP4 0.0.0.0 <span class="annotation">; RTCP 포트 정보</span>
+a=ice-ufrag:someUfrag <span class="annotation">; ICE 사용자 조각 (user fragment)</span>
+a=ice-pwd:somePasswordxxxxxxxxxxxx <span class="annotation">; ICE 비밀번호</span>
+a=setup:actpass <span class="annotation">; DTLS 연결 역할 (active/passive)</span>
+a=mid:0 <span class="annotation">; 미디어 라인 식별자</span>
+a=rtcp-mux <span class="annotation">; RTP와 RTCP를 같은 포트에서 사용 (Multiplexing)</span>
+a=rtpmap:111 opus/48000/2 <span class="annotation">; 코덱 111번은 Opus (48kHz, 2채널)</span>
+a=fmtp:111 minptime=10;useinbandfec=1 <span class="annotation">; 코덱 포맷 특정 파라미터</span>
+a=rtpmap:0 PCMU/8000 <span class="annotation">; 코덱 0번은 G.711 PCMU</span>
+a=rtpmap:8 PCMA/8000 <span class="annotation">; 코덱 8번은 G.711 PCMA</span>
+a=rtpmap:101 telephone-event/8000 <span class="annotation">; DTMF 톤</span>
+a=fmtp:101 0-16
+a=ssrc:123456789 cname:someCname <span class="annotation">; 동기화 소스 정보</span>
+a=fingerprint:sha-256 AA:BB:CC... <span class="annotation">; DTLS 인증서 지문</span></pre>
+                 <p class="mt-4">주요 속성(<code>a=</code>)은 ICE 연결 정보, DTLS 인증서 지문, 사용할 코덱의 상세 정보 등을 정의하여 피어 간의 성공적인 통신을 가능하게 합니다.</p>
+             `;
+             openModal(title, content);
+         });
+
+         document.getElementById('show-ice-btn').addEventListener('click', () => {
+             const title = "ICE Candidate 예시 및 분석";
+             const content = `
+                 <p class="mb-4">ICE Candidate는 피어가 연결될 수 있는 주소와 포트 정보를 담고 있습니다. 'Trickle ICE' 방식을 통해 발견되는 즉시 시그널링 채널로 교환됩니다.</p>
+                 <pre>candidate:4234997325 1 udp 2122260223 192.168.0.10 54321 typ host generation 0</pre>
+                 <p class="mt-4"><strong>구성 요소 분석:</strong></p>
+                 <ul class="list-disc list-inside space-y-2 mt-2">
+                     <li><code>candidate:</code>: 필수 접두사</li>
+                     <li><code>4234997325</code>: <strong>foundation</strong> - 후보들을 그룹화하는 식별자</li>
+                     <li><code>1</code>: <strong>component-id</strong> - 컴포넌트 식별자 (1은 RTP, 2는 RTCP)</li>
+                     <li><code>udp</code>: <strong>transport</strong> - 전송 프로토콜 (주로 udp)</li>
+                     <li><code>2122260223</code>: <strong>priority</strong> - 후보의 우선순위 (높을수록 선호됨)</li>
+                     <li><code>192.168.0.10</code>: <strong>connection-address</strong> - 후보의 IP 주소</li>
+                     <li><code>54321</code>: <strong>port</strong> - 후보의 포트 번호</li>
+                     <li><code>typ host</code>: <strong>type</strong> - 후보의 타입.
+                         <ul class="list-inside list-disc ml-6 mt-1">
+                             <li><strong>host:</strong> 로컬 인터페이스의 IP 주소</li>
+                             <li><strong>srflx:</strong> 서버 리플렉시브 주소 (STUN 서버를 통해 발견된 NAT 외부 주소)</li>
+                             <li><strong>prflx:</strong> 피어 리플렉시브 주소 (다른 피어와의 연결 테스트 중 발견된 주소)</li>
+                             <li><strong>relay:</strong> TURN 서버를 통한 중계 주소</li>
+                         </ul>
+                     </li>
+                     <li><code>generation 0</code>: <strong>generation</strong> - 후보의 세대 (일반적으로 0)</li>
+                     <li>(선택적) <code>raddr &lt;ip&gt; rport &lt;port&gt;</code>: srflx, relay 후보의 경우 관련 주소/포트 정보</li>
+                 </ul>
+             `;
+             openModal(title, content);
+         });
+         
+         const sections = document.querySelectorAll('.content-section');
+         const navLinks = document.querySelectorAll('.nav-link');
+
+         const observer = new IntersectionObserver((entries) => {
+             entries.forEach(entry => {
+                 if (entry.isIntersecting) {
+                     entry.target.classList.add('visible');
+                     const id = entry.target.getAttribute('id');
+                     navLinks.forEach(link => {
+                         link.classList.toggle('active', link.getAttribute('href') === `#${id}`);
+                     });
+                 }
+             });
+         }, { rootMargin: '-30% 0px -30% 0px' });
+
+         sections.forEach(section => observer.observe(section));
+         
+         let animationInterval;
+         const connectionAnimation = () => {
+             if (animationInterval) clearInterval(animationInterval);
+             const steps = document.querySelectorAll('#flow-animation-container .flow-step-text');
+             const server = document.getElementById('signaling-server-visual');
+             
+             steps.forEach(el => el.style.opacity = '0');
+             server.style.opacity = '0.5';
+
+             let currentStep = 0;
+             const animateStep = () => {
+                 steps.forEach((step, index) => {
+                     step.style.opacity = index === currentStep ? '1' : '0';
+                 });
+                 if (currentStep === 0) server.style.opacity = '1';
+                 else server.style.opacity = '0.5';
+             };
+             animateStep();
+             
+             animationInterval = setInterval(() => {
+                 currentStep = (currentStep + 1) % steps.length;
+                 animateStep();
+             }, 4000);
+         };
+         
+         connectionAnimation();
+         document.getElementById('restart-animation-btn').addEventListener('click', connectionAnimation);
+
+         const audioCodecData = {
+             labels: ['음질', '효율성(압축률)', '적응성', '계산 복잡도'],
+             datasets: [{ label: 'Opus', data: [9, 9, 10, 7], backgroundColor: 'rgba(59, 130, 246, 0.2)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 2 }, { label: 'G.711', data: [5, 2, 1, 10], backgroundColor: 'rgba(107, 114, 128, 0.2)', borderColor: 'rgba(107, 114, 128, 1)', borderWidth: 2 }]
+         };
+
+         const videoCodecData = {
+             labels: ['압축 효율', '하드웨어 지원', '라이선스 자유도'],
+             datasets: [{ label: 'VP8', data: [6, 4, 10], backgroundColor: 'rgba(239, 68, 68, 0.5)' }, { label: 'H.264', data: [7, 9, 3], backgroundColor: 'rgba(59, 130, 246, 0.5)' }, { label: 'VP9', data: [8, 6, 10], backgroundColor: 'rgba(245, 158, 11, 0.5)' }, { label: 'AV1', data: [10, 5, 10], backgroundColor: 'rgba(16, 185, 129, 0.5)' }]
+         };
+         
+         const codecDescElement = document.getElementById('codec-description');
+         const audioDesc = "WebRTC에서 필수로 구현해야 하는 오디오 코덱은 Opus와 G.711입니다. <strong>Opus</strong>는 낮은 비트레이트의 음성부터 고품질 스테레오 음악까지 넓은 범위를 커버하는 매우 유연하고 효율적인 코덱으로, 대부분의 WebRTC 통신에서 기본으로 사용됩니다. <strong>G.711</strong>은 기존 인터넷 전화(PSTN)망과의 연동을 위해 포함된 오래된 코덱입니다.";
+         const videoDesc = "비디오 코덱의 경우, <strong>VP8</strong>(구글의 로열티 프리 코덱)과 <strong>H.264</strong>(광범위한 하드웨어 가속 지원)가 기본으로 요구됩니다. 최근에는 더 높은 압축 효율을 제공하는 <strong>VP9</strong>과 차세대 로열티 프리 코덱인 <strong>AV1</strong>이 주목받고 있으며, 최신 브라우저들을 중심으로 지원이 확대되고 있습니다. AV1은 월등한 압축률을 보이지만 아직 계산 복잡도가 높다는 단점이 있습니다.";
+
+         const ctx = document.getElementById('codecChart').getContext('2d');
+         let codecChart;
+         
+         function createChart(type) {
+             if(codecChart) codecChart.destroy();
+             const isAudio = type === 'audio';
+             const data = isAudio ? audioCodecData : videoCodecData;
+             const chartType = isAudio ? 'radar' : 'bar';
+             
+             codecChart = new Chart(ctx, {
+                 type: chartType,
+                 data: data,
+                 options: {
+                     maintainAspectRatio: false,
+                     scales: isAudio ? { r: { beginAtZero: true, max: 10, pointLabels: { font: { size: 14 } }, grid: { color: '#e5e7eb' }, angleLines: { color: '#e5e7eb' } } } : { y: { beginAtZero: true, max: 10, grid: { color: '#e5e7eb' } } },
+                     plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label || ''}: ${c.formattedValue} (10점 만점)` } } }
+                 }
+             });
+             codecDescElement.innerHTML = isAudio ? audioDesc : videoDesc;
+         }
+         
+         const audioBtn = document.getElementById('show-audio-codecs');
+         const videoBtn = document.getElementById('show-video-codecs');
+         
+         audioBtn.addEventListener('click', () => {
+             createChart('audio');
+             audioBtn.className = 'codec-btn bg-blue-600 text-white font-bold py-2 px-4 rounded-lg';
+             videoBtn.className = 'codec-btn bg-white text-slate-700 font-bold py-2 px-4 rounded-lg border border-slate-300';
+         });
+         
+         videoBtn.addEventListener('click', () => {
+             createChart('video');
+             videoBtn.className = 'codec-btn bg-blue-600 text-white font-bold py-2 px-4 rounded-lg';
+             audioBtn.className = 'codec-btn bg-white text-slate-700 font-bold py-2 px-4 rounded-lg border border-slate-300';
+         });
+         
+         createChart('audio');
+     });
+     </script>
+
+ </body>
+ </html>
